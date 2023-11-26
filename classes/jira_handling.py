@@ -8,6 +8,7 @@ from jira import JIRA
 from jira.client import ResultList
 from jira.resources import Issue
 from openpyxl import load_workbook
+from funcoes import handling_fields
 
 # - Carrega as variáveis de ambiente no documento .env
 load_dotenv()
@@ -23,17 +24,18 @@ class JiraHandling:
     get_issue_list: Retorna um Resultlist para montar um dicionário com os dados.
 
     """
-    def __init__(self, usuario, api_token, servidor):
+    def __init__(self, usuario, api_token, servidor,jql):
         self._usuario = usuario
         self._api_token = api_token
         self._servidor = servidor
+        self._jql = jql
         self._fields_to_dcit = {}
         self._instancia_jira = self.create_jira_instance()
 
     def create_jira_instance(self):
         """
 
-        :return:
+        :return: Instância Jira.
         """
         jira = JIRA(basic_auth=(self._usuario, self._api_token),
                     server=self._servidor)
@@ -88,19 +90,29 @@ class JiraHandling:
         :return: Retorna uma lista (ResultList) com as issues.
         """
         try:
-            dict_of_fields =  self.set_custom_fields_list()
+            dict_of_fields = self.set_custom_fields_list()
             issues_list = cast(ResultList[Issue], jirapt.search_issues(self._instancia_jira, jql, 2,
                                                                   fields=list(dict_of_fields.values())))
             return issues_list
         except Exception as error:
             print(f"Erro ao processar a request: {type(error).__name__} : - {error}")
 
-    def _create_dict_to_sharepoint(self, issue_list_to_sharepoint: ResultList) -> List:
-        pass
+    def create_dict_to_sharepoint(self) -> List:
+        issues: ResultList = self.get_issue_list(self._jql)
+        for issue in issues:
+            pprint(issue.raw)
+        dict_of_fields = self.set_custom_fields_list()
+        list_of_issues: List = []
+        for issue in issues:
+            dict_issues: Dict = {}
+            for value, name in zip(dict_of_fields.values(), dict_of_fields.keys()):
+                dict_issues[name] = handling_fields(value, dict(issue.raw))
+            list_of_issues.append(dict_issues)
 
-
+        return list_of_issues
 
 
 if __name__ == "__main__":
-    jr = JiraHandling(os.environ['USER_JIRA'], os.environ['API_TOKEN'], os.environ['SERVIDOR'])
-    pprint(jr.set_custom_fields_list())
+    jr = JiraHandling(os.environ['USER_JIRA'], os.environ['API_TOKEN'], os.environ['SERVIDOR'], os.environ['JQL'])
+    issues = jr.create_dict_to_sharepoint()
+    pprint(issues)
